@@ -106,11 +106,21 @@ Copy `server/.env.example` → `server/.env` (and optionally `client/.env.exampl
 - `CORS_ORIGINS` – extra origins when the client is hosted separately.
 
 ## Production deploy
+One Node process serves the API **and** the built client — deploy it anywhere that runs Node or Docker.
+
+| Host | How |
+|---|---|
+| **Render** | New + → Blueprint → this repo (`render.yaml` does the rest) |
+| **Railway / Fly / Koyeb** | Deploy from GitHub — the `Dockerfile` is picked up automatically |
+| **VPS** | `JWT_SECRET=$(openssl rand -hex 32) docker compose up -d --build` |
+| **Vercel / Netlify** (frontend only) | `vercel.json` / `netlify.toml` build the client; point `VITE_API_URL` at an API deployed with one of the above |
+
 ```bash
-npm ci && npm run build
+npm ci --include=dev && npm run build
 NODE_ENV=production JWT_SECRET=… npm start     # single process on $PORT (default 4000)
 ```
-Put it behind HTTPS (required for geolocation, push and PWA install). Persist `server/data` and `server/uploads`.
+Full walkthroughs, environment variables, persistence and a **404 troubleshooting** section: see [DEPLOY.md](DEPLOY.md).
+Deploy the branch that contains the app (`arena/01a0bea1-sklllll`, or `main` after merging the PR).
 
 ## API overview
 All endpoints are under `/api`, JSON in/out, `Authorization: Bearer <jwt>`. Errors are `{ "error": "message" }`.

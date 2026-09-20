@@ -1,6 +1,7 @@
 import { io, type Socket } from 'socket.io-client';
 import { useEffect } from 'react';
 import { useAuth } from '@/stores/auth';
+import { API_BASE } from '@/lib/api';
 
 let socket: Socket | null = null;
 let currentToken: string | null = null;
@@ -17,7 +18,7 @@ export function getSocket(): Socket | null {
   if (!socket || currentToken !== token) {
     socket?.disconnect();
     currentToken = token;
-    socket = io('/', { path: '/socket.io', auth: { token }, transports: ['websocket', 'polling'], reconnectionDelayMax: 5000 });
+    socket = io(API_BASE || '/', { path: '/socket.io', auth: { token }, transports: ['websocket', 'polling'], reconnectionDelayMax: 5000 });
   }
   return socket;
 }

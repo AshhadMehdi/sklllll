@@ -1,0 +1,133 @@
+# Deploying Qareeb
+
+Qareeb is **one Node.js process**: the Express API (REST + Socket.io + SQLite) that also serves the
+built React client from `client/dist`. That means it must run on a host that can keep a Node server
+running — **Render, Railway, Fly.io, a VPS/Docker** — not on a purely static host.
+
+> **Getting "This page doesn't exist" / 404 after deploying?** See [Troubleshooting](#troubleshooting)
+> at the bottom — it is almost always one of three things: wrong branch, static-only host, or
+> missing build/output settings.
+
+| Option | Best for | Cost | Data persists? |
+|---|---|---|---|
+| **A. Render** (Blueprint) | Fastest path, zero config | Free tier | Only with a paid disk |
+| **B. Railway** (Dockerfile) | Easy + persistent volume | ~$5/mo credit | Yes (volume) |
+| **C. Docker / VPS** | Full control, cheapest at scale | VPS price | Yes (volumes) |
+| **D. Vercel/Netlify + API elsewhere** | You insist on Vercel/Netlify for the frontend | Free + API host | Depends on API host |
+
+Before any option: **make sure the branch you deploy contains the app** (`client/`, `server/`,
+`package.json` at the repo root). The app was built on the `arena/01a0bea1-sklllll` branch; either
+select that branch in your host's settings or merge the pull request into `main` first.
+
+---
+
+## A. Render (recommended — one click)
+
+1. Push/merge the code, then in Render: **New + → Blueprint** → connect the GitHub repo → pick the branch → **Apply**.
+   `render.yaml` in the repo root configures everything (Node 22, build, start, health check, a random `JWT_SECRET`).
+2. Wait for the first deploy (~3 min). Open the URL Render gives you — the app boots, runs migrations and seeds the
+   Abbottabad demo data automatically.
+
+Manual alternative (New + → Web Service):
+
+| Setting | Value |
+|---|---|
+| Runtime | Node |
+| Build command | `npm ci --include=dev && npm run build` |
+| Start command | `npm start` |
+| Health check path | `/api/health` |
+| Environment | `NODE_VERSION=22.14.0`, `NODE_ENV=production`, `JWT_SECRET=<long random string>` |
+
+Notes
+- The **free instance sleeps** after 15 min without traffic (first request takes ~30 s) and its disk is
+  **ephemeral** — the SQLite DB and uploaded photos reset on every deploy/restart (demo data is re-seeded).
+- For real data, use a Starter instance and uncomment the `disk` block + `DATABASE_URL`/`UPLOADS_DIR` in `render.yaml`.
+
+## B. Railway
+
+1. **New Project → Deploy from GitHub repo** → select the repo and branch. Railway detects the `Dockerfile` and builds it.
+2. **Variables**: add `JWT_SECRET` (long random string). Railway injects `PORT` automatically.
+3. **Settings → Networking → Generate Domain**.
+4. Persistence: **Add Volume**, mount path `/app/server/data`, and add the variable
+   `UPLOADS_DIR=/app/server/data/uploads` so photos live on the same volume.
+
+## C. Docker on any VPS (Hetzner, DigitalOcean, AWS Lightsail, …)
+
+```bash
+git clone <repo> qareeb && cd qareeb
+JWT_SECRET=$(openssl rand -hex 32) docker compose up -d --build   # → http://SERVER_IP:4000
+```
+
+Put it behind HTTPS with Caddy (automatic Let's Encrypt):
+
+```
+# /etc/caddy/Caddyfile
+qareeb.example.com {
+    reverse_proxy 127.0.0.1:4000
+}
+```
+
+HTTPS is required for geolocation, push notifications and PWA install. Data lives in the
+`qareeb-data` and `qareeb-uploads` volumes. Update with `git pull && docker compose up -d --build`.
+
+## D. Split deploy — Vercel / Netlify frontend + API on Render/Railway
+
+The client can talk to an API on another origin.
+
+1. Deploy the API with option A or B and note its URL, e.g. `https://qareeb-api.onrender.com`.
+   On the API set `PUBLIC_URL=https://qareeb-api.onrender.com` (makes upload URLs absolute) and
+   `CORS_ORIGINS=https://your-frontend.vercel.app`.
+2. Frontend on **Vercel**: import the repo → Framework *Other* (settings are read from `vercel.json`) →
+   Environment variable `VITE_API_URL=https://qareeb-api.onrender.com` → Deploy.
+   Frontend on **Netlify**: import the repo (`netlify.toml` sets build/publish/SPA redirect) → add the same
+   `VITE_API_URL` variable → Deploy.
+
+`VITE_API_URL` is baked in at build time — redeploy the frontend after changing it.
+
+---
+
+## Environment variables
+
+| Variable | Required | Default | Purpose |
+|---|---|---|---|
+| `JWT_SECRET` | **yes (prod)** | dev secret | Signs login tokens |
+| `PORT` | no | `4000` | Set by most hosts automatically |
+| `NODE_ENV` | no | `development` | Use `production` |
+| `DATABASE_URL` | no | `file:server/data/qareeb.db` | SQLite file path or a Turso/libSQL URL (`libsql://…` + `DATABASE_AUTH_TOKEN`) |
+| `UPLOADS_DIR` | no | `server/uploads` | Folder for uploaded photos |
+| `AUTO_SEED` | no | `true` | Seed Abbottabad demo data into an empty DB. Set `false` for a real launch |
+| `DEMO_PASSWORD` | no | `password123` | Password of the seeded demo accounts |
+| `PUBLIC_URL` | split deploys | – | Public origin of the API |
+| `CORS_ORIGINS` | split deploys | any | Comma-separated allowed browser origins |
+| `GOOGLE_CLIENT_ID` | no | – | Enables Google Sign-In |
+| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` | no | auto-generated | Web Push keys. Set them explicitly in production so push subscriptions survive restarts (`npx web-push generate-vapid-keys`) |
+| `VITE_API_URL` (client build) | split deploys | same origin | API origin for a frontend hosted elsewhere |
+
+## Going live checklist
+
+- [ ] `JWT_SECRET` set to a long random value
+- [ ] HTTPS in front of the app
+- [ ] Persistent storage for the DB and uploads (disk/volume, or Turso via `DATABASE_URL`)
+- [ ] Fixed VAPID keys so push keeps working across deploys
+- [ ] `AUTO_SEED=false` (or wipe the demo data) and change the admin password (`admin@qareeb.app`)
+- [ ] `GOOGLE_CLIENT_ID` with your domain added to the OAuth client's authorised origins
+
+## Troubleshooting
+
+**"This page doesn't exist" / 404 right after deploying**
+
+1. **Wrong branch.** `main` only contained video files until the app PR is merged. Select the branch
+   `arena/01a0bea1-sklllll` in the host's settings (or merge the PR) and redeploy.
+2. **Static-only host (Vercel, Netlify, GitHub Pages, Cloudflare Pages) with default settings.** They build
+   nothing runnable from the repo root, so every URL is a 404. Either use option A/B/C, or use option D
+   (the repo's `vercel.json` / `netlify.toml` set the build command, output folder and SPA rewrite).
+3. **Deep links 404 but `/` works** — the host lacks an SPA fallback. `vercel.json` and `netlify.toml`
+   add it; on Nginx use `try_files $uri /index.html;`. The Node server already handles this itself.
+
+**Build fails with "tsc: not found" / "vite: not found"** — `NODE_ENV=production` made npm skip
+devDependencies. Use `npm ci --include=dev` as the install/build command (already in `render.yaml`, `Dockerfile`, `vercel.json`, `netlify.toml`).
+
+**Login works but the map is blank** — map tiles are loaded from CARTO by the browser; make sure the
+site is served over HTTPS and no content blocker is active.
+
+**Everything resets after a while** — you are on ephemeral storage (Render free tier, Docker without volumes). See persistence notes above.

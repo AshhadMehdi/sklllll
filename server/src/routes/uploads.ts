@@ -26,5 +26,5 @@ const upload = multer({
 export const uploadsRouter = Router();
 uploadsRouter.post('/', requireAuth, upload.single('file'), (req, res) => {
   if (!req.file) throw badRequest('No file uploaded (use multipart field "file")');
-  res.status(201).json({ url: `/uploads/${req.file.filename}`, size: req.file.size, mimetype: req.file.mimetype });
+  res.status(201).json({ url: `${config.publicUrl}/uploads/${req.file.filename}`, size: req.file.size, mimetype: req.file.mimetype });
 });

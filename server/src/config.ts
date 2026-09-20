@@ -21,6 +21,8 @@ export const config = {
   migrationsDir: path.join(serverRoot, 'drizzle'),
   uploadsDir: env('UPLOADS_DIR', path.join(serverRoot, 'uploads')),
   clientDist: path.join(repoRoot, 'client', 'dist'),
+  // Public origin of this API (only needed when the frontend is hosted on another domain) – makes upload URLs absolute
+  publicUrl: env('PUBLIC_URL', '').replace(/\/+$/, ''),
   corsOrigins: env('CORS_ORIGINS', '')
     .split(',')
     .map((s) => s.trim())

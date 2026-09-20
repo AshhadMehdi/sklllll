@@ -12,6 +12,9 @@ export class ApiError extends Error {
   }
 }
 
+/** Origin of the API when the frontend is hosted separately (e.g. Vercel/Netlify → Render). Empty = same origin. */
+export const API_BASE = String(import.meta.env.VITE_API_URL ?? '').replace(/\/+$/, '');
+
 let tokenGetter: () => string | null = () => null;
 let onUnauthorized: () => void = () => {};
 export const configureApi = (opts: { getToken: () => string | null; onUnauthorized: () => void }) => {
@@ -25,7 +28,7 @@ async function request<T>(method: string, path: string, body?: unknown, opts: { 
   if (token) headers.Authorization = `Bearer ${token}`;
   const isForm = typeof FormData !== 'undefined' && body instanceof FormData;
   if (body !== undefined && !isForm) headers['Content-Type'] = 'application/json';
-  const res = await fetch(`/api${path}`, { method, headers, body: body === undefined ? undefined : isForm ? (body as FormData) : JSON.stringify(body) });
+  const res = await fetch(`${API_BASE}/api${path}`, { method, headers, body: body === undefined ? undefined : isForm ? (body as FormData) : JSON.stringify(body) });
   if (res.status === 204) return undefined as T;
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
