@@ -70,19 +70,29 @@ qareeb.example.com {
 HTTPS is required for geolocation, push notifications and PWA install. Data lives in the
 `qareeb-data` and `qareeb-uploads` volumes. Update with `git pull && docker compose up -d --build`.
 
-## D. Split deploy — Vercel / Netlify frontend + API on Render/Railway
+## D. Vercel (or Netlify) for the frontend + API on Render/Railway
 
-The client can talk to an API on another origin.
+Vercel and Netlify are static/serverless hosts: they can serve the React app but **cannot run the
+Qareeb API** (it needs a long-running Node process for Socket.io realtime, the SQLite file and photo
+uploads). So the API goes on Render/Railway and the Vercel site talks to it.
 
-1. Deploy the API with option A or B and note its URL, e.g. `https://qareeb-api.onrender.com`.
-   On the API set `PUBLIC_URL=https://qareeb-api.onrender.com` (makes upload URLs absolute) and
-   `CORS_ORIGINS=https://your-frontend.vercel.app`.
-2. Frontend on **Vercel**: import the repo → Framework *Other* (settings are read from `vercel.json`) →
-   Environment variable `VITE_API_URL=https://qareeb-api.onrender.com` → Deploy.
-   Frontend on **Netlify**: import the repo (`netlify.toml` sets build/publish/SPA redirect) → add the same
-   `VITE_API_URL` variable → Deploy.
+**Step 1 — API on Render (3 min)**
+1. [render.com](https://render.com) → **New + → Blueprint** → connect `AshhadMehdi/sklllll` → branch `arena/01a0bea1-sklllll` (or `main` after merging PR #1) → **Apply**.
+2. When it's live, copy its URL, e.g. `https://qareeb.onrender.com`, and open `…/api/health` — you should see `{"ok":true}`.
+   (This service also serves the complete app on that URL, so you could stop here.)
+3. Optional but recommended, in the Render service → Environment: `PUBLIC_URL=https://qareeb.onrender.com` (absolute URLs for uploaded photos) and `CORS_ORIGINS=https://<your-project>.vercel.app` (lock CORS to your site).
 
-`VITE_API_URL` is baked in at build time — redeploy the frontend after changing it.
+**Step 2 — Frontend on Vercel**
+1. Vercel → **Add New… → Project** → import `AshhadMehdi/sklllll`. Leave *Root Directory* as `./` and the framework preset as **Other** — the repo's `vercel.json` supplies the install/build commands, the `client/dist` output folder and the SPA rewrite.
+2. Before deploying, expand **Environment Variables** and add `VITE_API_URL` = `https://qareeb.onrender.com` (no trailing slash).
+3. **Deploy.** Then go to **Settings → Git → Production Branch** and set it to `arena/01a0bea1-sklllll` (or merge PR #1 so `main` has the app) — otherwise the production URL builds the empty `main`. Every other branch push becomes a Preview deployment automatically.
+4. Changed `VITE_API_URL` later? It is baked in at build time → **Deployments → ⋯ → Redeploy**.
+
+Netlify is identical: import the repo (`netlify.toml` holds the settings), add `VITE_API_URL`, pick the branch under *Site configuration → Build & deploy → Branches*.
+
+**What you'll see on the Vercel site**
+- *"Backend not connected"* → `VITE_API_URL` isn't set (or the deploy predates it). Set it and redeploy.
+- *"Waking up the server…"* → the free Render instance was asleep; it takes ~30-60 s and the app continues automatically.
 
 ---
 
@@ -121,7 +131,8 @@ The client can talk to an API on another origin.
 2. **Static-only host (Vercel, Netlify, GitHub Pages, Cloudflare Pages) with default settings.** They build
    nothing runnable from the repo root, so every URL is a 404. Either use option A/B/C, or use option D
    (the repo's `vercel.json` / `netlify.toml` set the build command, output folder and SPA rewrite).
-3. **Deep links 404 but `/` works** — the host lacks an SPA fallback. `vercel.json` and `netlify.toml`
+3. **Vercel shows "Backend not connected" instead of 404** — good, the frontend is deployed; now point it at an API with `VITE_API_URL` (option D).
+4. **Deep links 404 but `/` works** — the host lacks an SPA fallback. `vercel.json` and `netlify.toml`
    add it; on Nginx use `try_files $uri /index.html;`. The Node server already handles this itself.
 
 **Build fails with "tsc: not found" / "vite: not found"** — `NODE_ENV=production` made npm skip
