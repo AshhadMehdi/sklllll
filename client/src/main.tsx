@@ -7,6 +7,7 @@ import App from './App';
 import './index.css';
 import { registerServiceWorker } from './lib/push';
 import { useTheme, useThemeSync } from './stores/theme';
+import { BackendGate } from './components/common/BackendGate';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -20,7 +21,9 @@ function Root() {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
-        <App />
+        <BackendGate>
+          <App />
+        </BackendGate>
         <Toaster position="top-center" richColors closeButton theme={isDark ? 'dark' : 'light'} toastOptions={{ className: 'rounded-2xl! shadow-float!' }} />
       </BrowserRouter>
     </QueryClientProvider>
